@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>挖空提示词工具</title>
+  <style>
+    :root {
+      --bg: #f6f3ee;
+      --ink: #1c1917;
+      --muted: #78716c;
+      --line: #d6d3d1;
+      --accent: #0f766e;
+      --accent-soft: #ccfbf1;
+      --blank: #b45309;
+      --panel: #fffdf9;
+      --shadow: 0 10px 30px rgba(28, 25, 23, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse 80% 50% at 10% -10%, #d1fae5 0%, transparent 55%),
+        radial-gradient(ellipse 70% 40% at 100% 0%, #fde68a 0%, transparent 50%),
+        var(--bg);
+    }
+
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 28px 20px 48px;
+    }
+
+    header h1 {
+      margin: 0 0 6px;
+      font-size: 1.55rem;
+      letter-spacing: 0.02em;
+    }
+
+    header p {
+      margin: 0 0 22px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font: inherit;
+      line-height: 1.7;
+      background: #fff;
+    }
+
+    textarea:focus, input:focus, button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+      align-items: center;
+    }
+
+    .mode {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .mode label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      font-weight: 500;
+      padding: 6px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      cursor: pointer;
+      background: #fff;
+    }
+
+    .mode input { accent-color: var(--accent); }
+
+    .auto-trans {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      font-weight: 500;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .auto-trans input { accent-color: var(--accent); }
+
+    .blank-item .hint-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .blank-item .hint-row input { flex: 1; }
+
+    button.tiny {
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+
+    input.translating {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 16px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+    }
+
+    button.secondary {
+      background: #fff;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .token {
+      display: inline;
+      cursor: pointer;
+      border-radius: 4px;
+      padding: 1px 2px;
+      transition: background 0.12s ease;
+      line-height: 1.9;
+      user-select: none;
+    }
+
+    .token:hover { background: var(--accent-soft); }
+
+    .token.selecting {
+      background: #99f6e4;
+    }
+
+    .token.blanked {
+      color: var(--blank);
+      background: #fff7ed;
+      cursor: pointer;
+      text-decoration: none;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .token.blanked:hover { background: #ffedd5; }
+
+    .workspace {
+      font-size: 1.08rem;
+      line-height: 2;
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 80px;
+      user-select: none;
+      cursor: text;
+    }
+
+    .blanks-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .blank-item {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .blank-item .num {
+      font-weight: 700;
+      color: var(--blank);
+      padding-top: 10px;
+      text-align: center;
+    }
+
+    .blank-item input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+      background: #fff;
+    }
+
+    .blank-meta {
+      grid-column: 2;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: -4px;
+    }
+
+    .output {
+      font-family: "Cascadia Code", "Consolas", "Noto Sans SC", monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.8;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      min-height: 100px;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--ink);
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.2s ease;
+      z-index: 20;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1.05rem;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-head h2 { margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>挖空提示词工具</h1>
+      <p>粘贴英文或日文 → 单击/拖选挖空 → 自动译成中文提示词（可改）→ 一键复制。</p>
+    </header>
+
+    <section class="panel">
+      <label for="source">原文</label>
+      <textarea id="source" placeholder="在此粘贴英文段落，或日文句子……"></textarea>
+      <div class="row">
+        <div class="mode">
+          <label><input type="radio" name="mode" value="en" checked /> 英文（按单词）</label>
+          <label><input type="radio" name="mode" value="ja" /> 日文（按字）</label>
+        </div>
+        <button id="loadBtn" type="button">开始挖空</button>
+        <button id="resetBtn" class="secondary" type="button">清空重来</button>
+        <label class="auto-trans">
+          <input type="checkbox" id="autoTranslate" checked />
+          挖空后自动译成中文
+        </label>
+        <span class="hint">拖选可合成一个空；再点已挖空项可取消</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>点击 / 拖选挖空</h2>
+        <span class="hint" id="blankCount">已挖空 0 处</span>
+      </div>
+      <div id="workspace" class="workspace">先粘贴原文，再点「开始挖空」。</div>
+    </section>
+
+    <section class="panel">
+      <h2>提示词</h2>
+      <div id="blanksList" class="blanks-list">
+        <p class="hint" style="margin:0">点击上方文字开始挖空后，这里会出现编号输入框。</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>可复制结果</h2>
+        <button id="copyBtn" class="secondary" type="button" disabled>复制全部</button>
+      </div>
+      <div class="mode output-mode" style="margin-bottom:12px">
+        <label><input type="radio" name="hintPos" value="bottom" checked /> 提示词在下方</label>
+        <label><input type="radio" name="hintPos" value="inline" /> 提示词在空里</label>
+        <label><input type="radio" name="hintPos" value="both" /> 空里 + 下方</label>
+      </div>
+      <pre id="output" class="output">（挖空后自动生成）</pre>
+    </section>
+  </div>
+
+  <div id="toast" class="toast">已复制到剪贴板</div>
+
+  <script>
+    const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚㉛㉜㉝㉞㉟㊱㊲㊳㊴㊵㊶㊷㊸㊹㊺㊻㊼㊽㊾㊿";
+
+    const sourceEl = document.getElementById("source");
+    const workspaceEl = document.getElementById("workspace");
+    const blanksListEl = document.getElementById("blanksList");
+    const outputEl = document.getElementById("output");
+    const blankCountEl = document.getElementById("blankCount");
+    const copyBtn = document.getElementById("copyBtn");
+    const toastEl = document.getElementById("toast");
+
+    /** @type {{ id: number, text: string, hint: string, autoHint: boolean, translating: boolean }[]} */
+    let blanks = [];
+    /** @type {{ type: 'token'|'space', text: string, blankId: number|null }[]} */
+    let tokens = [];
+    let nextId = 1;
+    const translateCache = new Map();
+
+    let dragActive = false;
+    let dragStart = null;
+    let dragEnd = null;
+    let dragMoved = false;
+
+    function circled(n) {
+      if (n >= 1 && n <= CIRCLED.length) return CIRCLED[n - 1];
+      return "(" + n + ")";
+    }
+
+    function underscoreFor(text) {
+      const compact = text.replace(/\s+/g, "");
+      const len = Math.max(compact.length, text.length > 0 ? Math.min(text.length, 24) : 1);
+      const n = /[A-Za-z]/.test(text) ? Math.max(len, 3) : Math.max(len, 1);
+      return "_".repeat(n);
+    }
+
+    function getMode() {
+      return document.querySelector('input[name="mode"]:checked').value;
+    }
+
+    function autoTranslateOn() {
+      return document.getElementById("autoTranslate").checked;
+    }
+
+    function sourceLang() {
+      return getMode() === "ja" ? "ja" : "en";
+    }
+
+    async function translateViaMyMemory(text, sl) {
+      const url =
+        "https://api.mymemory.translated.net/get?q=" +
+        encodeURIComponent(text) +
+        "&langpair=" +
+        encodeURIComponent(sl + "|zh-CN");
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("mymemory http");
+      const data = await res.json();
+      let out = (data && data.responseData && data.responseData.translatedText) || "";
+      out = String(out).trim();
+      if (!out || /MYMEMORY WARNING/i.test(out)) throw new Error("mymemory quota");
+      return out;
+    }
+
+    async function translateViaLingva(text, sl) {
+      const bases = [
+        "https://lingva.ml",
+        "https://lingva.garudalinux.org",
+        "https://translate.plausibility.cloud",
+      ];
+      let lastErr;
+      for (const base of bases) {
+        try {
+          const url = base + "/api/v1/" + sl + "/zh/" + encodeURIComponent(text);
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          const data = await res.json();
+          const out = (data && data.translation ? String(data.translation) : "").trim();
+          if (out) return out;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error("lingva failed");
+    }
+
+    async function translateViaGoogleGtx(text, sl) {
+      const url =
+        "https://translate.googleapis.com/translate_a/single?client=gtx&sl=" +
+        encodeURIComponent(sl) +
+        "&tl=zh-CN&dt=t&q=" +
+        encodeURIComponent(text);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("gtx http");
+      const data = await res.json();
+      if (!Array.isArray(data) || !Array.isArray(data[0])) throw new Error("gtx parse");
+      const out = data[0]
+        .map((part) => (Array.isArray(part) ? part[0] : ""))
+        .join("")
+        .trim();
+      if (!out) throw new Error("gtx empty");
+      return out;
+    }
+
+    async function translateText(text) {
+      const cleaned = text.replace(/\s+/g, " ").trim();
+      if (!cleaned) return "";
+      const sl = sourceLang();
+      const cacheKey = sl + "|" + cleaned;
+      if (translateCache.has(cacheKey)) return translateCache.get(cacheKey);
+
+      const errors = [];
+      for (const fn of [translateViaGoogleGtx, translateViaLingva, translateViaMyMemory]) {
+        try {
+          const out = await fn(cleaned, sl);
+          translateCache.set(cacheKey, out);
+          return out;
+        } catch (err) {
+          errors.push(err);
+        }
+      }
+      throw errors[errors.length - 1] || new Error("translate failed");
+    }
+
+    async function fillTranslation(blankId, force) {
+      const blank = blanks.find((b) => b.id === blankId);
+      if (!blank) return;
+      if (!force && !autoTranslateOn()) return;
+
+      blank.translating = true;
+      blank.autoHint = true;
+      blank.hint = "翻译中…";
+      renderBlanksList();
+      refreshOutput();
+
+      try {
+        const translated = await translateText(blank.text);
+        const current = blanks.find((b) => b.id === blankId);
+        if (!current) return;
+        if (!force && !current.autoHint) return;
+        current.hint = translated;
+        current.autoHint = true;
+        current.translating = false;
+        renderBlanksList();
+        refreshOutput();
+      } catch {
+        const current = blanks.find((b) => b.id === blankId);
+        if (!current) return;
+        current.translating = false;
+        if (current.autoHint && (current.hint === "翻译中…" || force)) {
+          current.hint = "";
+          current.autoHint = true;
+        }
+        renderBlanksList();
+        refreshOutput();
+        showToast("翻译失败，可手动填写或点「重译」");
+      }
+    }
+
+    function tokenize(text, mode) {
+      const result = [];
+      if (mode === "en") {
+        const re = /[A-Za-z]+(?:'[A-Za-z]+)?|\d+(?:\.\d+)?|[^\sA-Za-z\d]+|\s+/g;
+        let m;
+        while ((m = re.exec(text)) !== null) {
+          const chunk = m[0];
+          const isWord = /^[A-Za-z]/.test(chunk) || /^\d/.test(chunk);
+          result.push({
+            type: isWord ? "token" : "space",
+            text: chunk,
+            blankId: null,
+          });
+        }
+      } else {
+        for (const ch of text) {
+          if (/\s/.test(ch)) {
+            result.push({ type: "space", text: ch, blankId: null });
+          } else if (/[\u3040-\u30ff\u3400-\u9fff\u3005\uff66-\uff9dA-Za-z0-9]/.test(ch)) {
+            result.push({ type: "token", text: ch, blankId: null });
+          } else {
+            result.push({ type: "space", text: ch, blankId: null });
+          }
+        }
+      }
+      return result;
+    }
+
+    function loadText() {
+      const text = sourceEl.value;
+      if (!text.trim()) {
+        showToast("请先粘贴原文");
+        return;
+      }
+      blanks = [];
+      nextId = 1;
+      tokens = tokenize(text, getMode());
+      clearDrag();
+      renderWorkspace();
+      renderBlanksList();
+      refreshOutput();
+    }
+
+    function resetAll() {
+      sourceEl.value = "";
+      blanks = [];
+      tokens = [];
+      nextId = 1;
+      clearDrag();
+      workspaceEl.textContent = "先粘贴原文，再点「开始挖空」。";
+      blanksListEl.innerHTML = '<p class="hint" style="margin:0">点击或拖选上方文字后，这里会出现编号输入框。</p>';
+      outputEl.textContent = "（挖空后自动生成）";
+      blankCountEl.textContent = "已挖空 0 处";
+      copyBtn.disabled = true;
+    }
+
+    function orderIndex(blankId) {
+      return blanks.findIndex((b) => b.id === blankId);
+    }
+
+    function blankRange(blankId) {
+      let start = -1;
+      let end = -1;
+      for (let i = 0; i < tokens.length; i++) {
+        if (tokens[i].blankId === blankId) {
+          if (start === -1) start = i;
+          end = i;
+        }
+      }
+      return { start, end };
+    }
+
+    function removeBlank(blankId) {
+      for (const t of tokens) {
+        if (t.blankId === blankId) t.blankId = null;
+      }
+      blanks = blanks.filter((b) => b.id !== blankId);
+    }
+
+    function createBlankFromRange(from, to) {
+      const start = Math.min(from, to);
+      const end = Math.max(from, to);
+
+      // 范围内已有空：先清掉（再点同一空 = 取消）
+      const hitIds = new Set();
+      for (let i = start; i <= end; i++) {
+        if (tokens[i].blankId != null) hitIds.add(tokens[i].blankId);
+      }
+
+      // 纯单击已挖空区域 → 取消
+      if (!dragMoved && hitIds.size === 1) {
+        const onlyId = [...hitIds][0];
+        const range = blankRange(onlyId);
+        if (range.start === start && range.end === end) {
+          removeBlank(onlyId);
+          return;
+        }
+      }
+
+      for (const id of hitIds) removeBlank(id);
+
+      // 裁掉两端纯标点/空白，保证空至少覆盖一个可挖空字
+      let s = start;
+      let e = end;
+      while (s <= e && tokens[s].type !== "token") s++;
+      while (e >= s && tokens[e].type !== "token") e--;
+      if (s > e) return;
+
+      const id = nextId++;
+      const parts = [];
+      for (let i = s; i <= e; i++) {
+        tokens[i].blankId = id;
+        parts.push(tokens[i].text);
+      }
+      blanks.push({ id, text: parts.join(""), hint: "", autoHint: true, translating: false });
+      if (autoTranslateOn()) fillTranslation(id, false);
+    }
+
+    function clearDrag() {
+      dragActive = false;
+      dragStart = null;
+      dragEnd = null;
+      dragMoved = false;
+      workspaceEl.querySelectorAll(".token.selecting").forEach((el) => {
+        el.classList.remove("selecting");
+      });
+    }
+
+    function highlightDrag() {
+      workspaceEl.querySelectorAll(".token.selecting").forEach((el) => {
+        el.classList.remove("selecting");
+      });
+      if (dragStart == null || dragEnd == null) return;
+      const a = Math.min(dragStart, dragEnd);
+      const b = Math.max(dragStart, dragEnd);
+      workspaceEl.querySelectorAll("[data-index]").forEach((el) => {
+        const start = Number(el.dataset.index);
+        const end = el.dataset.endIndex != null ? Number(el.dataset.endIndex) : start;
+        if (end >= a && start <= b) el.classList.add("selecting");
+      });
+    }
+
+    function indexFromEventTarget(target) {
+      const el = target && target.closest ? target.closest("[data-index]") : null;
+      if (!el || !workspaceEl.contains(el)) return null;
+      return Number(el.dataset.index);
+    }
+
+    function renderWorkspace() {
+      workspaceEl.innerHTML = "";
+      if (!tokens.length) {
+        workspaceEl.textContent = "先粘贴原文，再点「开始挖空」。";
+        return;
+      }
+
+      let i = 0;
+      while (i < tokens.length) {
+        const token = tokens[i];
+
+        if (token.blankId != null) {
+          const id = token.blankId;
+          const range = blankRange(id);
+          const blank = blanks.find((b) => b.id === id);
+          const ord = orderIndex(id) + 1;
+          const span = document.createElement("span");
+          span.className = "token blanked";
+          span.dataset.index = String(range.start);
+          span.dataset.blankId = String(id);
+          span.dataset.endIndex = String(range.end);
+          span.textContent = underscoreFor(blank ? blank.text : token.text) + circled(ord);
+          span.title = "原文：" + (blank ? blank.text : token.text) + "（再点取消）";
+          workspaceEl.appendChild(span);
+          i = range.end + 1;
+          continue;
+        }
+
+        const span = document.createElement("span");
+        span.className = "token";
+        span.dataset.index = String(i);
+        span.textContent = token.text;
+        if (token.type === "token") {
+          span.title = "单击挖空，拖选可合成一个空";
+        } else {
+          span.style.cursor = "default";
+          span.title = "";
+        }
+        workspaceEl.appendChild(span);
+        i++;
+      }
+    }
+
+    function onPointerDown(e) {
+      if (!tokens.length) return;
+      if (e.button != null && e.button !== 0) return;
+      const idx = indexFromEventTarget(e.target);
+      if (idx == null) return;
+
+      const blankId = tokens[idx].blankId;
+      if (blankId != null) {
+        const range = blankRange(blankId);
+        dragStart = range.start;
+        dragEnd = range.end;
+      } else {
+        dragStart = idx;
+        dragEnd = idx;
+      }
+      dragActive = true;
+      dragMoved = false;
+      highlightDrag();
+      e.preventDefault();
+    }
+
+    function onPointerMove(e) {
+      if (!dragActive || dragStart == null) return;
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      let idx = indexFromEventTarget(el);
+      if (idx == null) return;
+
+      // 拖到已挖空块上时，按拖动方向取整段起/终点
+      const node = el && el.closest ? el.closest("[data-index]") : null;
+      if (node && node.dataset.endIndex != null) {
+        const a = Number(node.dataset.index);
+        const b = Number(node.dataset.endIndex);
+        idx = dragStart <= a ? b : a;
+      }
+
+      if (idx !== dragEnd) {
+        dragEnd = idx;
+        dragMoved = true;
+        highlightDrag();
+      }
+    }
+
+    function onPointerUp() {
+      if (!dragActive) return;
+      const from = dragStart;
+      const to = dragEnd;
+      clearDrag();
+      if (from == null || to == null) return;
+      createBlankFromRange(from, to);
+      renderWorkspace();
+      renderBlanksList();
+      refreshOutput();
+    }
+
+    function renderBlanksList() {
+      blankCountEl.textContent = "已挖空 " + blanks.length + " 处";
+      blanksListEl.innerHTML = "";
+
+      if (!blanks.length) {
+        blanksListEl.innerHTML = '<p class="hint" style="margin:0">点击或拖选上方文字后，这里会出现编号输入框。</p>';
+        return;
+      }
+
+      blanks.forEach((blank, i) => {
+        const item = document.createElement("div");
+        item.className = "blank-item";
+
+        const num = document.createElement("div");
+        num.className = "num";
+        num.textContent = circled(i + 1);
+
+        const row = document.createElement("div");
+        row.className = "hint-row";
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.placeholder = blank.translating ? "翻译中…" : "写提示词（可空）";
+        input.value = blank.hint;
+        if (blank.translating) input.classList.add("translating");
+        input.addEventListener("input", () => {
+          blank.hint = input.value;
+          blank.autoHint = false;
+          blank.translating = false;
+          input.classList.remove("translating");
+          refreshOutput();
+        });
+
+        const reBtn = document.createElement("button");
+        reBtn.type = "button";
+        reBtn.className = "secondary tiny";
+        reBtn.textContent = "重译";
+        reBtn.title = "重新翻译成中文";
+        reBtn.disabled = !!blank.translating;
+        reBtn.addEventListener("click", () => fillTranslation(blank.id, true));
+
+        row.appendChild(input);
+        row.appendChild(reBtn);
+
+        const meta = document.createElement("div");
+        meta.className = "blank-meta";
+        meta.textContent = "原文： " + blank.text;
+
+        item.appendChild(num);
+        item.appendChild(row);
+        item.appendChild(meta);
+        blanksListEl.appendChild(item);
+      });
+    }
+
+    function getHintPos() {
+      const el = document.querySelector('input[name="hintPos"]:checked');
+      return el ? el.value : "bottom";
+    }
+
+    function hintTextOf(blank) {
+      if (!blank) return "";
+      if (blank.translating || blank.hint === "翻译中…") return "";
+      return (blank.hint || "").trim();
+    }
+
+    function formatBlankSlot(blank, fallbackText, ord) {
+      const raw = blank ? blank.text : fallbackText;
+      const underscores = underscoreFor(raw);
+      const hint = hintTextOf(blank);
+      const pos = getHintPos();
+
+      if ((pos === "inline" || pos === "both") && hint) {
+        // 纯文本无法做真正下划线，用方括号标出空内提示词：[秋季]①
+        return "[" + hint + "]" + circled(ord);
+      }
+      return underscores + circled(ord);
+    }
+
+    function buildBlankedText() {
+      let out = "";
+      let i = 0;
+      while (i < tokens.length) {
+        const token = tokens[i];
+        if (token.blankId == null) {
+          out += token.text;
+          i++;
+          continue;
+        }
+        const id = token.blankId;
+        const blank = blanks.find((b) => b.id === id);
+        const ord = orderIndex(id) + 1;
+        out += formatBlankSlot(blank, token.text, ord);
+        const range = blankRange(id);
+        i = range.end + 1;
+      }
+      return out;
+    }
+
+    function buildHintsText() {
+      if (!blanks.length) return "";
+      return blanks
+        .map((b, i) => {
+          const hint = hintTextOf(b);
+          return circled(i + 1) + (hint ? " " + hint : "");
+        })
+        .join("\n");
+    }
+
+    function refreshOutput() {
+      if (!tokens.length) {
+        outputEl.textContent = "（挖空后自动生成）";
+        copyBtn.disabled = true;
+        return;
+      }
+      const blanked = buildBlankedText();
+      const pos = getHintPos();
+      if (pos === "inline") {
+        outputEl.textContent = blanked;
+      } else {
+        const hints = buildHintsText();
+        outputEl.textContent = hints ? blanked + "\n\n" + hints : blanked;
+      }
+      copyBtn.disabled = false;
+    }
+
+    async function copyAll() {
+      const text = outputEl.textContent;
+      if (!text || text === "（挖空后自动生成）") return;
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast("已复制到剪贴板");
+      } catch {
+        const range = document.createRange();
+        range.selectNodeContents(outputEl);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        showToast("请按 Ctrl+C 复制");
+      }
+    }
+
+    let toastTimer;
+    function showToast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1600);
+    }
+
+    workspaceEl.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("mousemove", onPointerMove);
+    window.addEventListener("mouseup", onPointerUp);
+
+    // 触屏
+    workspaceEl.addEventListener("touchstart", (e) => {
+      if (!e.touches.length) return;
+      const t = e.touches[0];
+      onPointerDown({
+        target: document.elementFromPoint(t.clientX, t.clientY),
+        button: 0,
+        preventDefault: () => e.preventDefault(),
+        clientX: t.clientX,
+        clientY: t.clientY,
+      });
+    }, { passive: false });
+
+    window.addEventListener("touchmove", (e) => {
+      if (!dragActive || !e.touches.length) return;
+      const t = e.touches[0];
+      onPointerMove({ clientX: t.clientX, clientY: t.clientY });
+      e.preventDefault();
+    }, { passive: false });
+
+    window.addEventListener("touchend", onPointerUp);
+    window.addEventListener("touchcancel", clearDrag);
+
+    document.getElementById("loadBtn").addEventListener("click", loadText);
+    document.getElementById("resetBtn").addEventListener("click", resetAll);
+    copyBtn.addEventListener("click", copyAll);
+
+    document.querySelectorAll('input[name="mode"]').forEach((el) => {
+      el.addEventListener("change", () => {
+        if (tokens.length) showToast("模式已切换，请再点「开始挖空」");
+      });
+    });
+
+    document.querySelectorAll('input[name="hintPos"]').forEach((el) => {
+      el.addEventListener("change", refreshOutput);
+    });
+  </script>
+</body>
+</html>
