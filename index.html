@@ -254,6 +254,24 @@
       min-height: 100px;
     }
 
+    .output-block {
+      margin-top: 12px;
+    }
+
+    .output-block:first-of-type {
+      margin-top: 0;
+    }
+
+    .output-block .section-head {
+      margin-bottom: 8px;
+    }
+
+    .output-block h3 {
+      margin: 0;
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+
     .toast {
       position: fixed;
       left: 50%;
@@ -334,14 +352,29 @@
     <section class="panel">
       <div class="section-head">
         <h2>可复制结果</h2>
-        <button id="copyBtn" class="secondary" type="button" disabled>复制全部</button>
+        <button id="copyBothBtn" class="secondary" type="button" disabled>复制两个</button>
       </div>
       <div class="mode output-mode" style="margin-bottom:12px">
         <label><input type="radio" name="hintPos" value="bottom" checked /> 提示词在下方</label>
         <label><input type="radio" name="hintPos" value="inline" /> 提示词在空里</label>
         <label><input type="radio" name="hintPos" value="both" /> 空里 + 下方</label>
       </div>
-      <pre id="output" class="output">（挖空后自动生成）</pre>
+
+      <div class="output-block">
+        <div class="section-head">
+          <h3>提示词版</h3>
+          <button id="copyHintBtn" class="secondary tiny" type="button" disabled>复制</button>
+        </div>
+        <pre id="outputHint" class="output">（挖空后自动生成）</pre>
+      </div>
+
+      <div class="output-block">
+        <div class="section-head">
+          <h3>原文版 <span class="hint">挖空处为 [原文]①</span></h3>
+          <button id="copyOrigBtn" class="secondary tiny" type="button" disabled>复制</button>
+        </div>
+        <pre id="outputOrig" class="output">（挖空后自动生成）</pre>
+      </div>
     </section>
   </div>
 
@@ -353,10 +386,14 @@
     const sourceEl = document.getElementById("source");
     const workspaceEl = document.getElementById("workspace");
     const blanksListEl = document.getElementById("blanksList");
-    const outputEl = document.getElementById("output");
+    const outputHintEl = document.getElementById("outputHint");
+    const outputOrigEl = document.getElementById("outputOrig");
     const blankCountEl = document.getElementById("blankCount");
-    const copyBtn = document.getElementById("copyBtn");
+    const copyBothBtn = document.getElementById("copyBothBtn");
+    const copyHintBtn = document.getElementById("copyHintBtn");
+    const copyOrigBtn = document.getElementById("copyOrigBtn");
     const toastEl = document.getElementById("toast");
+    const EMPTY_OUTPUT = "（挖空后自动生成）";
 
     /** @type {{ id: number, text: string, hint: string, autoHint: boolean, translating: boolean }[]} */
     let blanks = [];
@@ -555,9 +592,10 @@
       clearDrag();
       workspaceEl.textContent = "先粘贴原文，再点「开始挖空」。";
       blanksListEl.innerHTML = '<p class="hint" style="margin:0">点击或拖选上方文字后，这里会出现编号输入框。</p>';
-      outputEl.textContent = "（挖空后自动生成）";
+      outputHintEl.textContent = EMPTY_OUTPUT;
+      outputOrigEl.textContent = EMPTY_OUTPUT;
       blankCountEl.textContent = "已挖空 0 处";
-      copyBtn.disabled = true;
+      setCopyEnabled(false);
     }
 
     function orderIndex(blankId) {
@@ -815,20 +853,29 @@
       return (blank.hint || "").trim();
     }
 
-    function formatBlankSlot(blank, fallbackText, ord) {
+    function setCopyEnabled(on) {
+      copyBothBtn.disabled = !on;
+      copyHintBtn.disabled = !on;
+      copyOrigBtn.disabled = !on;
+    }
+
+    function formatBlankSlot(blank, fallbackText, ord, mode) {
       const raw = blank ? blank.text : fallbackText;
       const underscores = underscoreFor(raw);
       const hint = hintTextOf(blank);
       const pos = getHintPos();
 
+      if (mode === "original") {
+        return "[" + raw + "]" + circled(ord);
+      }
+
       if ((pos === "inline" || pos === "both") && hint) {
-        // 纯文本无法做真正下划线，用方括号标出空内提示词：[秋季]①
         return "[" + hint + "]" + circled(ord);
       }
       return underscores + circled(ord);
     }
 
-    function buildBlankedText() {
+    function buildBlankedText(mode) {
       let out = "";
       let i = 0;
       while (i < tokens.length) {
@@ -841,7 +888,7 @@
         const id = token.blankId;
         const blank = blanks.find((b) => b.id === id);
         const ord = orderIndex(id) + 1;
-        out += formatBlankSlot(blank, token.text, ord);
+        out += formatBlankSlot(blank, token.text, ord, mode);
         const range = blankRange(id);
         i = range.end + 1;
       }
@@ -860,35 +907,55 @@
 
     function refreshOutput() {
       if (!tokens.length) {
-        outputEl.textContent = "（挖空后自动生成）";
-        copyBtn.disabled = true;
+        outputHintEl.textContent = EMPTY_OUTPUT;
+        outputOrigEl.textContent = EMPTY_OUTPUT;
+        setCopyEnabled(false);
         return;
       }
-      const blanked = buildBlankedText();
+
+      const hintBody = buildBlankedText("hint");
       const pos = getHintPos();
       if (pos === "inline") {
-        outputEl.textContent = blanked;
+        outputHintEl.textContent = hintBody;
       } else {
         const hints = buildHintsText();
-        outputEl.textContent = hints ? blanked + "\n\n" + hints : blanked;
+        outputHintEl.textContent = hints ? hintBody + "\n\n" + hints : hintBody;
       }
-      copyBtn.disabled = false;
+
+      outputOrigEl.textContent = buildBlankedText("original");
+      setCopyEnabled(true);
     }
 
-    async function copyAll() {
-      const text = outputEl.textContent;
-      if (!text || text === "（挖空后自动生成）") return;
+    async function copyText(text, fallbackEl) {
+      if (!text || text === EMPTY_OUTPUT) return;
       try {
         await navigator.clipboard.writeText(text);
         showToast("已复制到剪贴板");
       } catch {
-        const range = document.createRange();
-        range.selectNodeContents(outputEl);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
+        if (fallbackEl) {
+          const range = document.createRange();
+          range.selectNodeContents(fallbackEl);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
         showToast("请按 Ctrl+C 复制");
       }
+    }
+
+    async function copyHint() {
+      await copyText(outputHintEl.textContent, outputHintEl);
+    }
+
+    async function copyOrig() {
+      await copyText(outputOrigEl.textContent, outputOrigEl);
+    }
+
+    async function copyBoth() {
+      const a = outputHintEl.textContent;
+      const b = outputOrigEl.textContent;
+      if (!a || a === EMPTY_OUTPUT) return;
+      await copyText(a + "\n\n----------\n\n" + b, null);
     }
 
     let toastTimer;
@@ -928,7 +995,9 @@
 
     document.getElementById("loadBtn").addEventListener("click", loadText);
     document.getElementById("resetBtn").addEventListener("click", resetAll);
-    copyBtn.addEventListener("click", copyAll);
+    copyBothBtn.addEventListener("click", copyBoth);
+    copyHintBtn.addEventListener("click", copyHint);
+    copyOrigBtn.addEventListener("click", copyOrig);
 
     document.querySelectorAll('input[name="mode"]').forEach((el) => {
       el.addEventListener("change", () => {
